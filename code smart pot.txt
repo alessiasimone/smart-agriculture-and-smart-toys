@@ -1,0 +1,66 @@
+// C++ code
+//
+
+#define light A0 
+#define soil A1
+#define temp A2
+#define motor 3
+#define green 5
+
+int soil_state;
+int luminosity;
+int temperature;
+int RPM;
+float motor_analog;
+float water;
+double euro;
+
+void setup()
+{
+  
+  pinMode(soil, INPUT);
+  pinMode(light, INPUT);
+  pinMode(temp, INPUT);
+  pinMode(motor, OUTPUT);
+  pinMode(green, OUTPUT);
+  Serial.begin(9600);
+
+}
+
+
+void loop()
+{
+  //ANALOG RANGE OF SENSORS
+  // soil_state = [0, 876]
+  // luminosity = [1, 310]
+  // temperature = [-40, 124]
+  // motor = [0, 255]
+  
+  luminosity = analogRead(light);
+  soil_state = analogRead(soil);
+  temperature = ((analogRead(temp) * 0.00488) - 0.5) / 0.01;
+  
+  //defining simple multiple linear regression
+  motor_analog = -0.5*soil_state - 0.3*temperature + 0.1*luminosity;
+  
+  //contraint the water contraint to assume values within range [0, 255]
+  motor_analog = constrain(motor_analog, 0, 255);
+  
+  analogWrite(motor, motor_analog);  
+  analogWrite(green, motor_analog);
+  
+  //43 motor_analog : 1300 RPM = motor_analog : x RPM
+  RPM = (1300 * motor_analog) / 43;
+  
+  //water pump have a Qmax of 6 liters every 1300 RPM
+  //6 l : 1300RPM = x l : RPM
+  water = (6 * RPM) / 1300; //liters per minute
+  
+  //euro
+  euro = water * 0.001;
+  
+  Serial.print("Liters of water per minute: "); Serial.println(water);
+  Serial.print("Costs in Euros per minutes: "); Serial.println(euro);
+  delay(3000);
+  
+}
