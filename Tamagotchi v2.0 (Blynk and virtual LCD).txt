@@ -1,0 +1,191 @@
+#define BLYNK_TEMPLATE_ID           "TMPLxuyKgllO"
+#define BLYNK_DEVICE_NAME           "Tamagotchi"
+#define BLYNK_AUTH_TOKEN            "ij_yBqT0ZqlRQ93ofpzk3VNdXuVTleJC"
+#define BLYNK_PRINT Serial
+#define light A0
+
+char auth[] = BLYNK_AUTH_TOKEN;
+char ssid[] = "hotspot";
+char pass[] = "Alessia911";
+
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#include <DHT.h>
+
+#define DHTPIN 14 
+#define DHTTYPE DHT11 
+DHT dht(DHTPIN, DHTTYPE);
+
+BlynkTimer timer;
+
+float life = 100;
+float hungry = 0;
+float thirsty = 0;
+int thresholdlight = 100;
+int thresholdtemp = 20;
+float degree;
+int luminosity;
+int foodbutton;
+int waterbutton;
+WidgetLCD lcd(V10);
+WidgetLED red(V3);
+WidgetLED blue(V6);
+WidgetLED yellow(V9);
+
+void hungryDecrease() {
+  
+  hungry--;
+
+}
+
+void hungryIncrease() {
+  
+  hungry = hungry + 0.2;
+
+}
+
+void thirstyDecrease() {
+  
+  thirsty--;
+
+}
+
+void thirstyIncrease() {
+  
+  thirsty = thirsty + 0.2;
+
+}
+
+//Stating what happen by changing the state of the red (food) button
+BLYNK_WRITE(V1) 
+{
+
+  foodbutton = param.asInt();
+  
+  if (foodbutton == 1)
+    hungryDecrease();
+  else if (foodbutton == 0)
+    hungryIncrease();
+
+}
+
+//Stating what happen by changing the state of the blue (water) button
+BLYNK_WRITE(V5) 
+{
+
+  waterbutton = param.asInt(); 
+
+  if (waterbutton == 1)
+    thirstyDecrease();
+  else if (waterbutton == 0)
+    thirstyIncrease();
+
+}
+
+//syncronizing button state with the last value registered by the server
+BLYNK_CONNECTED() {
+
+  Blynk.syncVirtual(V1);
+  Blynk.syncVirtual(V5);
+  
+}
+
+// Variables are updated once every second in the following way:
+void updates() {
+
+  life = 100 - (0.5*hungry + 0.5*thirsty);
+  life = constrain(life, 0, 100); //this function allows me to define the life variable as a linear regression: decreasing hungry and thirsty, life increase.
+                                                            //in addition, I forced the variable to assume values in range [0, 100]. 
+  
+  if (luminosity > thresholdlight && degree > thresholdtemp){
+    if (waterbutton == 1)
+      thirstyDecrease();
+    if (waterbutton == 0)
+      thirstyIncrease();
+  }
+
+  if (luminosity > thresholdlight){
+    if (foodbutton == 1)
+      hungryDecrease();
+    if (foodbutton == 0)
+      hungryIncrease();
+  }
+
+  Blynk.virtualWrite(V0, life);
+  Blynk.virtualWrite(V2, hungry);
+  Blynk.virtualWrite(V4, thirsty);
+
+  degree = dht.readTemperature(); 
+  luminosity = analogRead(light);
+  Blynk.virtualWrite(V7, luminosity);
+  Blynk.virtualWrite(V8, degree);
+
+}
+
+//manage blinking blue and red led when thirsty and hungry are >= 70%
+void manageBlinkingLeds() {
+
+  if (luminosity > thresholdlight){ //yellow led is on when pet is awake, off when pet is sleeping
+    yellow.on();}
+  else if (luminosity < thresholdlight){
+    yellow.off();}
+
+  if (hungry > 70){ //if hungry state reach 70%, red led blink
+    if (red.getValue()) {
+      red.off();} 
+    else {
+      red.on();}}
+  else if (hungry < 70) {
+    red.off();
+  }
+
+  if (thirsty > 70){ //if thirsty reach 70%, blue led blink
+    if (blue.getValue()) {
+      blue.off();} 
+    else {
+      blue.on();}}
+  else if (hungry < 70) {
+    blue.off();
+  }
+  
+}
+
+//Display pet status on the LCD widget on the smartphone only
+void sendString() {
+
+  degree = dht.readTemperature(); 
+  luminosity = analogRead(light);
+
+  if (life == 0) {
+    lcd.print(3, 1, "+ .R.I.P. ");}
+  else if (luminosity > thresholdlight) {
+    lcd.print(3, 1, "I'm awake!");}
+  else if (luminosity < thresholdlight) {
+    lcd.print(3, 1, "...ZzZz...");}
+
+}
+
+void setup()
+{
+
+  Serial.begin(115200);
+
+  Blynk.begin(auth, ssid, pass);
+  dht.begin();
+  
+  lcd.clear();
+  lcd.print(5, 0, "Hello");
+
+  timer.setInterval(1000, updates);
+  timer.setInterval(20, sendString);
+  timer.setInterval(1000, manageBlinkingLeds);
+
+}
+
+void loop()
+{
+
+  Blynk.run();
+  timer.run();
+
+}
